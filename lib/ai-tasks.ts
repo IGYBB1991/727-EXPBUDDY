@@ -30,23 +30,23 @@ Local knowledge:
 - Salary, interest, cashback, refunds from employers and dividends are income.
 - NETS, "POS" and "NETS QR" just mean the payment method; look at the merchant name after it.`;
 
-const categorySchema = (names: [string, ...string[]]) =>
-  z.object({
-    results: z.array(
-      z.object({
-        id: z.string(),
-        merchant: z.string(),
-        category: z.enum(names),
-        confidence: z.number(),
-      }),
-    ),
-  });
+// Category names are checked afterwards rather than in the schema, so one
+// odd answer only affects that row (it's left for the person to pick).
+const categorySchema = z.object({
+  results: z.array(
+    z.object({
+      id: z.string(),
+      merchant: z.string(),
+      category: z.string(),
+      confidence: z.number(),
+    }),
+  ),
+});
 
 export async function categorizeWithClaude(
   transactions: AiTransaction[],
   categories: AiCategory[],
 ): Promise<AiCategorization[]> {
-  const names = categories.map((c) => c.name) as [string, ...string[]];
   const list = categories
     .map((c) => `- ${c.name}${c.group ? ` (part of ${c.group})` : ""}${c.kind !== "expense" ? ` [${c.kind}, not spending]` : ""}`)
     .join("\n");
@@ -59,7 +59,7 @@ export async function categorizeWithClaude(
 
   const answer = await askForJson({
     system: SINGAPORE_CONTEXT,
-    schema: categorySchema(names),
+    schema: categorySchema,
     content: `Categorize each transaction below. A positive amount is money spent; a negative amount is money received (refund, income or transfer in).
 
 Use only these categories:
