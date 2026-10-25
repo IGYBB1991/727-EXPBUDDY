@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { categorizeWithClaude, inferColumnsWithClaude } from "@/lib/ai-tasks";
+import { categorizeWithClaude, extractPdfWithClaude, inferColumnsWithClaude } from "@/lib/ai-tasks";
 import { NotSignedInError, requireMemberForAction } from "@/lib/auth";
 import { categorizeTransactions } from "@/lib/categorize";
 import { listCategories } from "@/lib/db/categories";
 import { listRules } from "@/lib/db/rules";
+import { checkPdf, cleanPdfExtraction } from "@/lib/parsers/pdf";
+import { StatementError } from "@/lib/parsers/types";
+import { ClaudeError } from "@/lib/claude";
 import { processUploads, type IncomingFile } from "@/lib/upload/process";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload/types";
 
@@ -52,6 +55,20 @@ export async function POST(request: Request) {
         const outcome = await categorizeTransactions(transactions, categories, rules, categorizeWithClaude);
         aiFailed ||= outcome.aiFailed;
         return outcome.results;
+      },
+      parsePdf: async (bytes) => {
+        checkPdf(bytes);
+        try {
+          return cleanPdfExtraction(await extractPdfWithClaude(bytes));
+        } catch (error) {
+          if (error instanceof StatementError) throw error;
+          console.error("PDF reading failed", error);
+          throw new StatementError(
+            error instanceof ClaudeError && /API key/.test(error.message)
+              ? error.message
+              : "Claude couldn't read this PDF just now. Please try again, or upload a CSV instead.",
+          );
+        }
       },
       inferColumns: async (header, samples) => {
         try {

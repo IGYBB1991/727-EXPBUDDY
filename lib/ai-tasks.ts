@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { askForJson } from "@/lib/claude";
 import type { ColumnMap } from "@/lib/parsers/csv/columns";
+import type { PdfExtraction } from "@/lib/parsers/pdf";
 import { maskPrivateDetails } from "@/lib/privacy";
 
 // The jobs we give Claude. Only dates, descriptions (with long numbers and
@@ -133,4 +134,49 @@ Say which column holds the transaction date, which column(s) hold the descriptio
     ...(answer.money_out_column !== null ? { debit: answer.money_out_column } : {}),
     ...(answer.money_in_column !== null ? { credit: answer.money_in_column } : {}),
   };
+}
+
+const pdfSchema = z.object({
+  bank: z.string().nullable(),
+  period_start: z.string().nullable(),
+  period_end: z.string().nullable(),
+  transactions: z.array(
+    z.object({
+      date: z.string(),
+      description: z.string(),
+      amount: z.number(),
+      direction: z.enum(["debit", "credit"]),
+    }),
+  ),
+});
+
+// Reads the transactions out of a PDF statement. The whole PDF has to be
+// sent for this, so the README suggests CSV downloads where a bank offers them.
+export async function extractPdfWithClaude(bytes: ArrayBuffer): Promise<PdfExtraction> {
+  return askForJson({
+    system: "You extract transactions from Singapore bank and credit card statements accurately and completely.",
+    schema: pdfSchema,
+    maxTokens: 32000,
+    effort: "medium",
+    content: [
+      {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: Buffer.from(bytes).toString("base64") },
+      },
+      {
+        type: "text",
+        text: `List every transaction in this statement, in the order shown.
+
+For each transaction give:
+- date: the transaction date as YYYY-MM-DD (if the statement shows only day and month, use the year from the statement period)
+- description: the description exactly as printed, on one line
+- amount: a positive number in SGD (for foreign currency charges, the SGD amount)
+- direction: "debit" for money out (purchases, withdrawals, fees, interest charged) or "credit" for money in (deposits, refunds, payments to the card, cashback)
+
+Leave out anything that isn't a transaction: opening, closing or previous balances, "balance brought/carried forward", subtotals, totals, minimum payment and credit limit lines.
+
+Also give the bank's name (e.g. "DBS", "OCBC", "UOB", "Citibank", "Standard Chartered", "HSBC", "Trust Bank") and the statement period start and end dates as YYYY-MM-DD (null if not shown).`,
+      },
+    ],
+  });
 }

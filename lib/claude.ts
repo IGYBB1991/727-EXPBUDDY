@@ -24,12 +24,14 @@ export async function askForJson<S extends z.ZodType>({
   schema,
   check,
   maxTokens = 16000,
+  effort = "low",
 }: {
   system: string;
   content: Anthropic.ContentBlockParam[] | string;
   schema: S;
   check?: (value: z.infer<S>) => string | null;
   maxTokens?: number;
+  effort?: "low" | "medium" | "high";
 }): Promise<z.infer<S>> {
   let lastProblem = "no answer";
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -37,7 +39,7 @@ export async function askForJson<S extends z.ZodType>({
       const response = await getClient().messages.parse({
         model: claudeModel(),
         max_tokens: maxTokens,
-        output_config: { effort: "low", format: zodOutputFormat(schema) },
+        output_config: { effort, format: zodOutputFormat(schema) },
         system,
         messages: [{ role: "user", content }],
       });
