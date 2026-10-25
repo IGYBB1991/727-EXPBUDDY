@@ -7,8 +7,10 @@ and a dashboard shows where the money goes each month, with Food first.
 - Works on a phone and a computer. Each of you signs in with your own Google account.
 - Only the Google accounts you list can get in.
 - Statement files are read once and thrown away. Only the transactions are saved.
-- Claude only ever sees a transaction's date, description and amount. Names,
-  emails and long account or card numbers are hidden before anything is sent.
+- For CSV statements and for sorting, Claude only sees each transaction's date,
+  description and amount, with emails and long account or card numbers hidden.
+  A **PDF** has to be read whole by Claude to find the transactions, so it does
+  include your name and account number. Use CSV downloads if you'd rather avoid that.
 
 Built with Next.js (the website), Supabase (the database and Google sign-in),
 Claude (sorting transactions) and Vercel (hosting).
