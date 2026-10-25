@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { categorizeWithClaude, inferColumnsWithClaude } from "@/lib/ai-tasks";
 import { NotSignedInError, requireMemberForAction } from "@/lib/auth";
+import { categorizeTransactions } from "@/lib/categorize";
+import { listCategories } from "@/lib/db/categories";
+import { listRules } from "@/lib/db/rules";
 import { processUploads, type IncomingFile } from "@/lib/upload/process";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload/types";
 
@@ -40,8 +44,31 @@ export async function POST(request: Request) {
   );
 
   try {
-    const results = await processUploads(supabase, incoming);
-    return NextResponse.json({ files: results });
+    const [categories, rules] = await Promise.all([listCategories(supabase), listRules(supabase)]);
+    let aiFailed = false;
+
+    const results = await processUploads(supabase, incoming, {
+      categorize: async (transactions) => {
+        const outcome = await categorizeTransactions(transactions, categories, rules, categorizeWithClaude);
+        aiFailed ||= outcome.aiFailed;
+        return outcome.results;
+      },
+      inferColumns: async (header, samples) => {
+        try {
+          return await inferColumnsWithClaude(header, samples);
+        } catch (error) {
+          console.error("Column detection failed", error);
+          return null;
+        }
+      },
+    });
+
+    return NextResponse.json({
+      files: results,
+      notice: aiFailed
+        ? "Claude couldn't suggest categories for some transactions just now. Please pick those yourself, or go back and try again."
+        : null,
+    });
   } catch (error) {
     console.error("Upload processing failed", error);
     return NextResponse.json({ error: "Something went wrong reading your statements. Please try again." }, { status: 500 });

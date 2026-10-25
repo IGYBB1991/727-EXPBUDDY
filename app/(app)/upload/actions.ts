@@ -7,6 +7,8 @@ import { actionError, type ActionResult } from "@/lib/action-result";
 import { requireMemberForAction } from "@/lib/auth";
 import { findOrCreateAccount } from "@/lib/db/accounts";
 import { listMembers, resolveOwner } from "@/lib/db/members";
+import { saveRules } from "@/lib/db/rules";
+import { patternFor } from "@/lib/merchant-rules";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -19,6 +21,8 @@ const transactionInput = z.object({
   categoryId: z.uuid().nullable(),
   confidence: z.number().min(0).max(1).nullable(),
   needsReview: z.boolean(),
+  // True when the person changed the suggested category: we remember it.
+  edited: z.boolean().default(false),
 });
 
 const saveInput = z.object({
@@ -95,6 +99,17 @@ export async function saveUploadAction(input: SaveUploadInput): Promise<ActionRe
       }
       saved += rows.length;
     }
+
+    // Learn from corrections: next time this merchant gets the same category.
+    await saveRules(
+      supabase,
+      parsed.data.files.flatMap((f) =>
+        f.transactions
+          .filter((t) => t.edited && t.categoryId)
+          .map((t) => ({ pattern: patternFor(t), categoryId: t.categoryId! })),
+      ),
+      member.id,
+    );
 
     revalidatePath("/", "layout");
     return { ok: true, data: { saved } };

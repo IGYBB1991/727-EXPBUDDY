@@ -42,7 +42,7 @@ type FileState = Omit<ReviewFile, "transactions"> & { accountName: string; rows:
 type Stage =
   | { name: "pick" }
   | { name: "reading" }
-  | { name: "review"; files: FileState[] }
+  | { name: "review"; files: FileState[]; notice: string | null }
   | { name: "done"; saved: number };
 
 export function UploadFlow({
@@ -85,6 +85,7 @@ export function UploadFlow({
       }
       setStage({
         name: "review",
+        notice: body.notice ?? null,
         files: (body.files as ReviewFile[]).map(({ transactions, ...file }) => ({
           ...file,
           accountName: file.bank ?? "",
@@ -126,11 +127,12 @@ export function UploadFlow({
     return (
       <Review
         files={stage.files}
+        notice={stage.notice}
         owner={owner}
         categories={categories}
         accounts={accounts}
         onBack={() => setStage({ name: "pick" })}
-        onChange={(next) => setStage({ name: "review", files: next })}
+        onChange={(next) => setStage({ ...stage, files: next })}
         onSaved={(saved) => setStage({ name: "done", saved })}
       />
     );
@@ -289,6 +291,7 @@ function DropZone({ files, onFiles, disabled }: { files: File[]; onFiles: (files
 
 function Review({
   files,
+  notice,
   owner,
   categories,
   accounts,
@@ -297,6 +300,7 @@ function Review({
   onSaved,
 }: {
   files: FileState[];
+  notice: string | null;
   owner: OwnerChoice;
   categories: Category[];
   accounts: string[];
@@ -312,6 +316,19 @@ function Review({
 
   function updateFile(key: string, change: (file: FileState) => FileState) {
     onChange(files.map((f) => (f.key === key ? change(f) : f)));
+  }
+
+  // Changing one row's category also changes rows from the same merchant
+  // that haven't been touched yet.
+  function changeCategory(row: Row, categoryId: string | null) {
+    const sameMerchant = (r: Row) =>
+      r.key === row.key || (!r.edited && row.merchant !== null && r.merchant === row.merchant);
+    onChange(
+      files.map((f) => ({
+        ...f,
+        rows: f.rows.map((r) => (sameMerchant(r) ? { ...r, categoryId, edited: true } : r)),
+      })),
+    );
   }
 
   function save() {
@@ -336,6 +353,7 @@ function Review({
                 categoryId: r.categoryId,
                 confidence: r.confidence,
                 needsReview: r.edited ? false : r.needsReview,
+                edited: r.edited,
               })),
           })),
       });
@@ -351,10 +369,17 @@ function Review({
           <p>
             Check the categories, untick anything you don&apos;t want, then save. Rows marked{" "}
             <Badge variant="warning">Please check</Badge> are ones we weren&apos;t sure about. Likely duplicates
-            start unticked.
+            start unticked. When you change a category, we&apos;ll remember it for that merchant next time.
           </p>
         </AlertDescription>
       </Alert>
+
+      {notice && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      )}
 
       <datalist id="account-names">
         {accounts.map((a) => (
@@ -424,6 +449,7 @@ function Review({
                       key={row.key}
                       row={row}
                       categories={categories}
+                      onCategory={(categoryId) => changeCategory(row, categoryId)}
                       onChange={(changes) =>
                         updateFile(file.key, (f) => ({
                           ...f,
@@ -469,10 +495,12 @@ function Review({
 function ReviewRow({
   row,
   categories,
+  onCategory,
   onChange,
 }: {
   row: Row;
   categories: Category[];
+  onCategory: (categoryId: string | null) => void;
   onChange: (changes: Partial<Row>) => void;
 }) {
   const flagged = row.needsReview && !row.edited;
@@ -508,7 +536,7 @@ function ReviewRow({
         <CategorySelect
           categories={categories}
           value={row.categoryId}
-          onChange={(categoryId) => onChange({ categoryId, edited: true })}
+          onChange={onCategory}
           className="w-full sm:w-56"
           aria-label={`Category for ${row.description}`}
         />
