@@ -49,3 +49,14 @@ export function formatMonth(month: string, style: "long" | "short" = "long"): st
 export function monthFromParam(value: string | string[] | undefined): string {
   return isMonth(value) ? value : currentMonth();
 }
+
+// "2026-10-05" → "5 Oct 2026" (or "5 Oct" without the year).
+export function formatDay(date: string, opts: { year?: boolean } = { year: true }): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-SG", {
+    day: "numeric",
+    month: "short",
+    ...(opts.year ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
