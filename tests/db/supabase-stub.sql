@@ -1,8 +1,19 @@
 -- A tiny stand-in for the parts of Supabase the migrations rely on, so the
 -- SQL can be tested against a plain local Postgres. Never run this on Supabase.
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin bypassrls;
+-- Roles belong to the whole Postgres server, so create them only once.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then
+    create role anon nologin;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    create role authenticated nologin;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then
+    create role service_role nologin bypassrls;
+  end if;
+end
+$$;
 grant usage on schema public to anon, authenticated, service_role;
 
 create schema auth;
