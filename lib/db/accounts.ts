@@ -31,6 +31,14 @@ export async function findOrCreateAccount(
   return data.id;
 }
 
+export async function createAccount(
+  supabase: SupabaseClient,
+  account: Pick<Account, "name" | "bank" | "owner_id">,
+) {
+  const { error } = await supabase.from("accounts").insert(account);
+  if (error) throw error;
+}
+
 export async function updateAccount(
   supabase: SupabaseClient,
   id: string,

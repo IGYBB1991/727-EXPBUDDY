@@ -104,3 +104,15 @@ describe("foldSlices", () => {
     expect(foldSlices(slices, 2)).toHaveLength(3);
   });
 });
+
+import { validateSplit } from "@/lib/db/transactions";
+
+describe("validateSplit", () => {
+  it("needs parts that add up to the total, to the cent", () => {
+    expect(validateSplit(100, [{ categoryId: "a", amount: 60.1 }, { categoryId: "b", amount: 39.9 }])).toBeNull();
+    expect(validateSplit(100, [{ categoryId: "a", amount: 60 }, { categoryId: "b", amount: 30 }])).toMatch(/\$10.00 short/);
+    expect(validateSplit(100, [{ categoryId: "a", amount: 60 }, { categoryId: "b", amount: 50 }])).toMatch(/\$10.00 over/);
+    expect(validateSplit(100, [{ categoryId: "a", amount: 100 }])).toMatch(/at least two/);
+    expect(validateSplit(100, [{ categoryId: "a", amount: 100 }, { categoryId: "b", amount: 0 }])).toMatch(/above zero/);
+  });
+});
