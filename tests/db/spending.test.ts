@@ -55,3 +55,40 @@ describe.skipIf(!TEST_DATABASE_URL)("monthly_spending", () => {
     ]);
   });
 });
+
+describe.skipIf(!TEST_DATABASE_URL)("merchant_spending", () => {
+  let db: Client;
+
+  beforeAll(async () => {
+    db = await freshDatabase();
+    await db.query(`insert into auth.users (id, email) values ($1, 'm@example.com')`, [MEMBER]);
+    await db.query(
+      `insert into public.members (user_id, email, display_name) values ($1, 'm@example.com', 'M')`,
+      [MEMBER],
+    );
+    await db.query(`
+      insert into public.transactions (date, description, merchant, amount, direction) values
+        ('2026-10-01', 'NTUC FP 1', 'NTUC FairPrice', 10, 'debit'),
+        ('2026-10-02', 'NTUC FP 2', 'NTUC FairPrice', 15, 'debit'),
+        ('2026-10-03', 'MYSTERY SHOP', null, 5, 'debit')`);
+  });
+
+  afterAll(async () => {
+    await db?.end();
+  });
+
+  it("adds up by merchant, falling back to the description", async () => {
+    const rows = await asUser(db, MEMBER, async () =>
+      (
+        await db.query(
+          `select merchant, total::float as total, transaction_count::int as n
+           from public.merchant_spending('2026-10-01', '2026-10-31') order by total desc`,
+        )
+      ).rows,
+    );
+    expect(rows).toEqual([
+      { merchant: "NTUC FairPrice", total: 25, n: 2 },
+      { merchant: "MYSTERY SHOP", total: 5, n: 1 },
+    ]);
+  });
+});
